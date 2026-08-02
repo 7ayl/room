@@ -1,7 +1,8 @@
 <template>
   <div id="app">
     <Loader v-if="showLoader" @done="onLoaderDone" />
-    <ThreeScene @open-notebook="openNotebook" />
+    <ThreeScene ref="scene" @open-notebook="openNotebook" />
+    <ControlPanel @action="onAction" />
     <Notebook v-if="notebookOpen" @close="closeNotebook" />
   </div>
 </template>
@@ -11,6 +12,7 @@ import { ref } from 'vue';
 import ThreeScene from './components/ThreeScene.vue';
 import Notebook from './components/Notebook.vue';
 import Loader from './components/Loader.vue';
+import ControlPanel from './components/ControlPanel.vue';
 
 const notebookOpen = ref(false);
 const showLoader = ref(false);
@@ -22,15 +24,19 @@ if (localStorage.getItem(key) !== today) {
   localStorage.setItem(key, today);
 }
 
-function onLoaderDone() {
-  showLoader.value = false;
-}
+function onLoaderDone() { showLoader.value = false; }
+function openNotebook() { notebookOpen.value = true; }
+function closeNotebook() { notebookOpen.value = false; }
 
-function openNotebook() {
-  notebookOpen.value = true;
-}
-function closeNotebook() {
-  notebookOpen.value = false;
+const scene = ref<any>(null);
+function onAction(e: any) {
+  const act = e;
+  if (scene.value && typeof scene.value.playAvatarAction === 'function') {
+    scene.value.playAvatarAction(act);
+  } else {
+    // emit DOM event if ref not ready
+    window.dispatchEvent(new CustomEvent('avatar-action', { detail: act }));
+  }
 }
 </script>
 
