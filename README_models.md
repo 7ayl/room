@@ -1,20 +1,23 @@
-# Models and remote loading
+### Models added by scripts/download-models.js
 
-I updated the scene to support loading models from an external base URL via the Vite env variable `VITE_MODEL_BASE`.
+This repository includes a helper script to download several low-poly sample models from the Khronos glTF Sample Models repository. These are used as placeholder models (avatar / cat / notebook) to demonstrate integration. The script downloads the following files into public/models/:
 
-By default the scene will try to load models from `/models/` (i.e. `public/models/avatar.glb`). If you don't want to commit binary model files to the repository, you can point the app at remote files using the `.env` file or a Vite dev server env variable.
+- avatar.glb <- Fox (Khronos glTF Sample Models)
+  - Source: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Fox
+  - Raw file used: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Fox/glTF-Binary/Fox.glb
+- cat.glb <- Duck (Khronos glTF Sample Models)
+  - Source: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Duck
+  - Raw file used: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb
+- notebook.glb <- Avocado (Khronos glTF Sample Models)
+  - Source: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Avocado
+  - Raw file used: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Avocado/glTF-Binary/Avocado.glb
 
-Example .env for local dev (create a `.env` file in repo root):
+License & attribution
+- These sample models come from the KhronosGroup glTF-Sample-Models repository. Licenses vary by model; many are provided by authors under permissive terms. Before using in a public product, please verify the license on the source pages above. I selected these as CC0/educational placeholders but please confirm for production use.
 
-VITE_MODEL_BASE=https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Fox/glTF-Binary/
+How to download models locally
+1. Ensure you have node installed
+2. Run:
+   npm run download-models
 
-But note: the default expectation is three files at:
-- ${MODEL_BASE}avatar.glb
-- ${MODEL_BASE}cat.glb
-- ${MODEL_BASE}notebook.glb
-
-If using the Khronos raw URLs directly, an example VITE_MODEL_BASE that works with the files we referenced in README_models.md is:
-
-VITE_MODEL_BASE=https://raw.githubusercontent.com/7ayl/room/init-magical-room/public/models/
-
-(If you run the GitHub Actions workflow or `npm run download-models` locally, the files will be placed at public/models/ and the default model base `/models/` will work.)
+This will place files in public/models/avatar.glb, public/models/cat.glb, public/models/notebook.glb
