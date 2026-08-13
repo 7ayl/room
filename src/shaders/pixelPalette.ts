@@ -37,8 +37,9 @@ void main() {
   vec2 centerUV = (px + 0.5) / texSize;
   vec4 col = texture2D(uTexture, centerUV);
 
-  // slight shimmer
-  col.rgb += 0.02 * sin(uTime + centerUV.yx * 10.0);
+  // slight shimmer (use a scalar to avoid type-mismatch)
+  float shimmer = sin(uTime + centerUV.y * 10.0);
+  col.rgb += vec3(0.02) * shimmer;
 
   // find nearest palette color
   float best = 1e9;
