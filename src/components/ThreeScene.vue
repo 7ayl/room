@@ -38,7 +38,7 @@ const PALETTE = ['#fff0fb','#ffbfdc','#ff78c9','#b76fa3','#7f3b6e','#ffd9f2'];
 const MODEL_BASE = import.meta.env.VITE_MODEL_BASE || '/models/';
 
 onMounted(() => { init(); animate(); });
-onBeforeUnmount(() => { if (animationId) cancelAnimationFrame(animationId); renderer.dispose(); window.removeEventListener('resize', onWindowResize); });
+onBeforeUnmount(() => { if (animationId) cancelAnimationFrame(animationId); if (renderer) renderer.dispose(); window.removeEventListener('resize', onWindowResize); });
 
 function emitEvent(name: string, detail?: any) { container.value?.dispatchEvent(new CustomEvent(name, { detail })); }
 
@@ -208,7 +208,8 @@ function setupRenderTargets(width: number, height: number) {
   if (renderTarget) renderTarget.dispose();
   renderTarget = new THREE.WebGLRenderTarget(rtW, rtH, { magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, depthBuffer: true });
 
-  if (composer) composer.dispose();
+  if (composer) { try { composer.dispose(); } catch (e) { /* ignore */ } }
+  // create composer without immediately embedding the texture into the uniforms
   composer = new EffectComposer(renderer, renderTarget);
   composer.setSize(rtW, rtH);
   const renderPass = new RenderPass(scene, camera);
@@ -216,14 +217,17 @@ function setupRenderTargets(width: number, height: number) {
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(rtW, rtH), settings.bloomStrength, settings.bloomRadius, settings.bloomThreshold);
   composer.addPass(bloomPass);
 
+  // screen quad
   screenScene = new THREE.Scene();
   screenCamera = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
   const geometry = new THREE.PlaneGeometry(2,2);
   const paletteColors = PALETTE.map(h => new THREE.Color(h));
+
+  // IMPORTANT: don't set the uTexture to a render target texture here — set it to null and assign after composer is ready
   screenMaterial = new THREE.ShaderMaterial({
     defines: { PALETTE_SIZE: String(PALETTE.length) },
     uniforms: THREE.UniformsUtils.merge([
-      { uTexture: { value: composer.readBuffer.texture } },
+      { uTexture: { value: null } },
       { uResolution: { value: new THREE.Vector2(rtW, rtH) } },
       { palette: { value: paletteColors } },
       { uTime: { value: 0 } }
@@ -234,6 +238,11 @@ function setupRenderTargets(width: number, height: number) {
   });
   screenMesh = new THREE.Mesh(geometry, screenMaterial);
   screenScene.add(screenMesh);
+
+  // now it's safe to point the uniform to the composer's read buffer
+  if (screenMaterial && composer && composer.readBuffer) {
+    screenMaterial.uniforms.uTexture.value = composer.readBuffer.texture;
+  }
 }
 
 function playActionByName(name: string) {
@@ -249,22 +258,66 @@ function playActionByName(name: string) {
 }
 
 function onWindowResize() {
-  const el = container.value!; const w = el.clientWidth || window.innerWidth; const h = el.clientHeight || window.innerHeight;
-  camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); setupRenderTargets(w, h);
+  const el = container.value!;
+  const w = el.clientWidth || window.innerWidth;
+  const h = el.clientHeight || window.innerHeight;
+  camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+
+  // re-create render targets at new resolution
+  setupRenderTargets(w, h);
 }
 
 function animate() {
   const time = performance.now() * 0.001;
   if (avatarMixer) avatarMixer.update(0.016);
-  scene.traverse((o: any) => { if (o.userData?.type === 'cat') { if (!o.userData._floatBase) o.userData._floatBase = o.position.y; o.position.y = o.userData._floatBase + Math.sin(time * 2) * 0.06; } });
+
+  scene.traverse((o: any) => {
+    if (o.userData?.type === 'cat') {
+      if (!o.userData._floatBase) o.userData._floatBase = o.position.y;
+      o.position.y = o.userData._floatBase + Math.sin(time * 2) * 0.06;
+    }
+  });
+
+  // update composer bloom params in case settings changed
   const bloomPass = composer && composer.passes && composer.passes.find((p: any) => p instanceof UnrealBloomPass);
-  if (bloomPass) { bloomPass.strength = settings.bloomStrength; bloomPass.radius = settings.bloomRadius; bloomPass.threshold = settings.bloomThreshold; }
-  composer.render(); if (screenMaterial) { screenMaterial.uniforms.uTexture.value = composer.readBuffer.texture; screenMaterial.uniforms.uTime.value = time; }
-  renderer.setRenderTarget(null); renderer.render(screenScene, screenCamera as THREE.Camera);
+  if (bloomPass) {
+    bloomPass.strength = settings.bloomStrength;
+    bloomPass.radius = settings.bloomRadius;
+    bloomPass.threshold = settings.bloomThreshold;
+  }
+
+  // Render to composer if available, otherwise fallback to regular renderer
+  try {
+    if (composer && typeof composer.render === 'function') {
+      composer.render();
+      // update shader texture and uniforms (ensure we don't clone render-target textures during UniformsUtils.merge)
+      if (screenMaterial && screenMaterial.uniforms) {
+        screenMaterial.uniforms.uTexture.value = composer.readBuffer.texture;
+        screenMaterial.uniforms.uTime.value = time;
+      }
+
+      renderer.setRenderTarget(null);
+      renderer.render(screenScene, screenCamera as THREE.Camera);
+    } else {
+      // fallback
+      renderer.setRenderTarget(null);
+      renderer.render(scene, camera);
+    }
+  } catch (err) {
+    // don't break the app; log and fallback
+    // eslint-disable-next-line no-console
+    console.error('Render error in animate():', err);
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+  }
+
   animationId = requestAnimationFrame(animate);
 }
 
-watch(() => settings.pixelScale, (val) => { const el = container.value!; setupRenderTargets(el.clientWidth || window.innerWidth, el.clientHeight || window.innerHeight); });
+watch(() => settings.pixelScale, (val) => {
+  const el = container.value!;
+  setupRenderTargets(el.clientWidth || window.innerWidth, el.clientHeight || window.innerHeight);
+});
 
 const vm: any = {};
 (vm as any).playAvatarAction = (name: string) => playActionByName(name);
